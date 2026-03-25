@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KOPI BOM PI PI (v1.8)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        body { background: linear-gradient(135deg, #1e1b4b, #4c1d95, #0f172a); background-attachment: fixed; color: #ffffff; touch-action: manipulation; user-select: none; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        .pixel-text { font-family: 'Press Start 2P', cursive; text-transform: uppercase; text-shadow: 2px 2px 0px #000; line-height: 1.4; }
+        
+        .console-screen { background-color: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 4px solid #6366f1; border-radius: 12px; box-shadow: inset 0 0 20px rgba(0,0,0,0.6), 0 10px 25px rgba(0,0,0,0.5); position: relative; }
+        
+        /* Cup CSS */
+        .cup-container { display: flex; flex-direction: column; justify-content: flex-end; width: 52px; height: 96px; background-color: rgba(255,255,255,0.15); border: 3px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px; overflow: hidden; position: relative; transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; margin: 0 auto; cursor: pointer; }
+        .cup-container.selected { transform: translateY(-12px); box-shadow: 0 12px 20px rgba(244, 114, 182, 0.8); border-color: #f472b6; }
+        
+        .liquid-layer { width: 100%; transition: height 0.3s steps(4); flex-shrink: 0; }
+        .liq-bandung { background-color: #f472b6; box-shadow: inset 0 2px 4px rgba(255,255,255,0.4); }      /* Pink */
+        .liq-tehpeng { background-color: #d97706; box-shadow: inset 0 2px 4px rgba(255,255,255,0.4); }      /* Amber/Milk Tea */
+        .liq-kopio { background-color: #291307; box-shadow: inset 0 2px 4px rgba(255,255,255,0.1); }        /* Dark Brown */
+        
+        .glow-btn-container {
+            position: relative; border-radius: 14px; overflow: hidden; padding: 4px; z-index: 1; cursor: pointer; width: 100%;
+        }
+        .glow-btn-container::before {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: conic-gradient(transparent, transparent, transparent, #f472b6, #d97706, #6366f1);
+            animation: rotate 2s linear infinite; z-index: -2;
+        }
+        .glow-btn-container::after {
+            content: ''; position: absolute; inset: 3px; background: #0f172a; border-radius: 10px; z-index: -1;
+        }
+        .glow-btn-content {
+            background: transparent; color: white; font-weight: 800; padding: 18px 24px; border: none; width: 100%; display: block; text-align: center;
+        }
+        .glow-btn-container:active { transform: scale(0.96); }
+        @keyframes rotate { 100% { transform: rotate(360deg); } }
+
+        @keyframes arc {
+            0% { transform: translate(0, 0) rotate(0deg) scale(1); }
+            50% { transform: translate(calc(var(--dx) * 0.5), -90px) rotate(90deg) scale(1.2); }
+            100% { transform: translate(var(--dx), var(--dy)) rotate(180deg) scale(1); }
+        }
+        .animate-arc { animation: arc 0.35s steps(8) forwards; z-index: 100; pointer-events: none; }
+        @keyframes popInOut { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; } 15% { transform: translate(-50%, -50%) scale(1.2) rotate(-5deg); opacity: 1; } 85% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; } }
+        .animate-pop { animation: popInOut 1.8s steps(10) forwards; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 50% { transform: translateX(8px); } 75% { transform: translateX(-8px); } }
+        .shake-animation { animation: shake 0.3s steps(5); }
+    </style>
+</head>
+<body class="flex flex-col h-screen w-screen relative pb-10">
+    
+    <!-- Top Bar & Progress Wrapper -->
+    <div class="relative w-full z-10">
+        <div class="w-full bg-slate-900/90 h-[48px] px-4 flex items-center justify-between border-b border-indigo-500 shadow-md backdrop-blur">
+            <button onclick="resetLevel()" class="text-indigo-300 hover:text-white bg-slate-800 rounded-full w-8 h-8 flex items-center justify-center border border-indigo-500 text-sm shadow-md transition active:scale-95" title="Restart">↺</button>
+            <span class="pixel-text text-[9px] sm:text-[11px] text-indigo-300 uppercase leading-snug">LEVEL <span id="levelCount" class="text-white text-[11px] sm:text-[13px] ml-1">1/25</span></span>
+        </div>
+        <!-- Progress Bar -->
+        <div class="w-full h-1.5 bg-gray-900 overflow-hidden shadow-inner absolute top-[48px] z-0">
+            <div id="patienceBar" class="h-full bg-gradient-to-r from-pink-500 to-indigo-500 w-[4%] transition-all duration-500 rounded-r shadow-[0_0_10px_#f472b6]"></div>
+        </div>
+    </div>
+
+    <!-- Main Game Area -->
+    <div class="flex-grow flex flex-col p-3 max-w-sm mx-auto w-full h-full justify-start mt-1 space-y-2 pt-2 pb-6">
+        
+        <!-- Action Buttons & Rules Circle -->
+        <div class="flex justify-between items-center px-1 z-20">
+            <div class="flex gap-2">
+                <button onclick="timeTravel()" id="undoBtn" class="bg-indigo-900/80 px-3 py-2 rounded text-[8px] pixel-text text-yellow-300 border border-yellow-500 active:bg-indigo-800 hover:scale-105 transition shadow-lg">UNDO (<span id="undoCount">5</span>)</button>
+                <button onclick="showRules()" class="bg-indigo-800/80 w-8 h-8 rounded-full border border-indigo-400 flex items-center justify-center text-indigo-200 font-bold font-sans text-xs hover:scale-105 shadow-lg">i</button>
+            </div>
+            <button onclick="giveUp()" class="bg-slate-900/80 px-3 py-2 rounded text-[8px] pixel-text text-pink-400 border border-pink-500 active:bg-slate-800 hover:scale-105 transition shadow-lg">GIVE UP LAH</button>
+        </div>
+
+        <!-- Center Stage - Vertically Centered -->
+        <div class="console-screen flex-grow flex flex-col items-center justify-center p-4 relative mt-1 overflow-hidden" id="stageContainer">
+            
+            <!-- Bright Background Header Overlaid Inside Stage -->
+            <div class="absolute top-4 w-full flex flex-col justify-center items-center z-30 pointer-events-none">
+                <h1 class="text-2xl md:text-3xl pixel-text text-white mb-2 text-center drop-shadow-[0_0_10px_rgba(255,255,255,0.9)]">KOPI BOM<br><span class="text-indigo-400">PI PI</span></h1>
+                <p class="text-indigo-300 mb-0 pixel-text text-[6px] md:text-[8px] text-center tracking-widest leading-loose drop-shadow-md">HIGH-STRESS DRINK MAKING STALL</p>
+            </div>
+
+            <div id="popText" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs md:text-sm font-black text-yellow-300 drop-shadow-[0_5px_5px_rgba(0,0,0,1)] opacity-0 pointer-events-none z-40 whitespace-normal text-center pixel-text max-w-xs leading-loose p-4 bg-slate-900 border-2 border-yellow-500 rounded hidden"></div>
+
+            <!-- 2x2 Cup Grid -->
+            <div class="grid grid-cols-2 gap-y-10 gap-x-12 w-full max-w-[190px] relative z-10 m-auto mt-20 mb-8">
+                <div class="cup-container" id="cup0" data-idx="0"></div>
+                <div class="cup-container" id="cup1" data-idx="1"></div>
+                <div class="cup-container" id="cup2" data-idx="2"></div>
+                <div class="cup-container" id="cup3" data-idx="3"></div>
+            </div>
+
+            <!-- Aiyobro Brand Logo Inside Play Area -->
+            <div class="absolute bottom-2 left-1/2 -translate-x-1/2 z-50 pointer-events-none text-center opacity-80" style="font-family: Arial, sans-serif;">
+                <div class="text-white text-[12px] tracking-wide">&gt;_&lt; aiyo<b class="font-bold">bro</b></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gate Overlay -->
+    <div id="gateOverlay" class="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center z-[90] p-6 backdrop-blur-md">
+        
+        <h1 class="text-4xl md:text-5xl pixel-text text-white mb-2 text-center drop-shadow-[0_0_15px_rgba(255,255,255,0.5)] -mt-16">KOPI BOM<br><span class="text-indigo-400">PI PI</span></h1>
+        <p class="text-indigo-300 mb-10 pixel-text text-[8px] md:text-[10px] text-center leading-loose tracking-widest">HIGH-STRESS DRINK MAKING STALL</p>
+        
+        <div class="w-full max-w-md flex gap-4 mb-10 px-4 justify-between">
+            <div class="flex-1 aspect-square rounded-lg liq-bandung border-4 border-pink-300 flex items-center justify-center text-center shadow-[0_0_20px_rgba(244,114,182,0.7)] hover:scale-105 transition cursor-pointer">
+                <span class="pixel-text text-[8px] sm:text-[10px] text-white font-black drop-shadow-[1px_1px_0px_#000]">BANDUNG</span>
+            </div>
+            <div class="flex-1 aspect-square rounded-lg liq-tehpeng border-4 border-amber-300 flex items-center justify-center text-center shadow-[0_0_20px_rgba(217,119,6,0.7)] hover:scale-105 transition cursor-pointer">
+                <span class="pixel-text text-[8px] sm:text-[10px] text-white font-black drop-shadow-[1px_1px_0px_#000]">TEH<br>PENG</span>
+            </div>
+            <div class="flex-1 aspect-square rounded-lg liq-kopio border-4 border-gray-500 flex items-center justify-center text-center shadow-[0_0_20px_black] text-gray-200 hover:scale-105 transition cursor-pointer">
+                <span class="pixel-text text-[8px] sm:text-[10px] text-white font-black drop-shadow-[1px_1px_0px_#000]">KOPI O</span>
+            </div>
+        </div>
+
+        <div class="w-full max-w-xs flex flex-col gap-3">
+            <div class="glow-btn-container" onclick="startGame()">
+                <div class="glow-btn-content pixel-text text-sm drop-shadow-[0_2px_4px_black]">START</div>
+            </div>
+        </div>
+
+        <!-- Aiyobro Brand Logo Inside Gate Area Bottom -->
+        <div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none text-center opacity-80" style="font-family: Arial, sans-serif;">
+            <div class="text-white text-[12px] tracking-wide">&gt;_&lt; aiyo<b class="font-bold">bro</b></div>
+        </div>
+    </div>
+
+    <!-- Info Rules Modal -->
+    <div id="rulesModal" class="absolute inset-0 z-[100] bg-black/80 hidden items-center justify-center p-4 backdrop-blur-sm">
+        <div class="w-full max-w-xs bg-slate-900 border-2 border-indigo-500 rounded-xl p-5 shadow-[0_0_15px_#6366f1] relative">
+            <button onclick="hideRules()" class="absolute top-2 right-3 text-white text-lg font-sans font-bold hover:text-pink-400">✖</button>
+            <h2 class="text-indigo-400 pixel-text text-[10px] text-center mb-6">HOW TO PLAY</h2>
+            <ul class="text-white font-sans text-sm space-y-4 font-bold">
+                <li class="flex gap-2"><span>1.</span><span>Tap a cup to lift the TOP drink layer.</span></li>
+                <li class="flex gap-2"><span>2.</span><span>Tap another cup to drop it. Colors must MATCH, or the cup must be EMPTY.</span></li>
+                <li class="flex gap-2"><span>3.</span><span>Sort all identical colors into solid cups to clear the level!</span></li>
+            </ul>
+            <button onclick="hideRules()" class="mt-6 w-full bg-indigo-600 rounded py-3 text-white pixel-text text-[8px] shadow-lg active:scale-95 transition">OK CAN</button>
+        </div>
+    </div>
+
+    <script>
+        const TOTAL_LEVELS = 25;
+        let currentCapacity = 3;
+        let undos = 5;
+        let currentLevel = 1;
+        
+        let cupsState = [];
+        let moveHistory = []; 
+        let selectedCup = null;
+        let isAnimating = false;
+
+        const roasts = {
+            invalidColor: "Bro tried to mix drinks. Literal war crime.",
+            deadlock: "Skill issue. You trapped yourself.",
+            win: "W Rizz. Michelin Star Kopi Kia."
+        };
+
+        function getCapacityForLevel(level) {
+            if(level <= 5) return 3;
+            if(level <= 10) return 4;
+            return 5;
+        }
+
+        function generateLevel(levelNum) {
+            let cap = getCapacityForLevel(levelNum);
+            
+            // Hardcoded initial 2 tutorials for cap=3
+            if (levelNum === 1) return [
+                ['bandung', 'tehpeng', 'kopio'],
+                ['tehpeng', 'bandung', 'kopio'],
+                ['kopio', 'tehpeng', 'bandung'],
+                []
+            ];
+            if (levelNum === 2) return [
+                ['bandung', 'kopio', 'tehpeng'],
+                ['tehpeng', 'bandung', 'bandung'],
+                ['kopio', 'tehpeng', 'kopio'],
+                []
+            ];
+            
+            // Procedural Generator for N-layers
+            let colors = [];
+            let types = ['bandung', 'tehpeng', 'kopio'];
+            for(let i=0; i<3; i++) {
+                for(let j=0; j<cap; j++) {
+                    colors.push(types[i]);
+                }
+            }
+            
+            // Fisher-Yates shuffle
+            for(let i = colors.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [colors[i], colors[j]] = [colors[j], colors[i]];
+            }
+
+            let state = [[], [], [], []];
+            let cIndex = 0;
+            for(let i=0; i<3; i++) {
+                for(let j=0; j<cap; j++) {
+                    state[i].push(colors[cIndex++]);
+                }
+            }
+            return state;
+        }
+
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+        let bgmInterval;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            startBGM();
+        }
+
+        function startBGM() {
+            if(bgmInterval) return;
+            const melody = [
+                392.00, 523.25, 392.00, 329.63, 
+                261.63, 329.63, 392.00, 523.25  
+            ];
+            let noteIdx = 0;
+            
+            bgmInterval = setInterval(() => {
+                if(audioCtx.state === 'suspended') return;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(melody[noteIdx], audioCtx.currentTime); 
+                
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime); 
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.25);
+                
+                osc.start(); osc.stop(audioCtx.currentTime + 0.25);
+                
+                noteIdx = (noteIdx + 1) % melody.length;
+            }, 300);
+        }
+
+        function stopBGM() {
+            if(bgmInterval) clearInterval(bgmInterval);
+            bgmInterval = null;
+        }
+
+        function playSfx(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            
+            if (type === 'select') {
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.5, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'pour') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.5, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+            } else if (type === 'error') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(80, audioCtx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.5, audioCtx.currentTime); gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+            }
+        }
+
+        // DOM Handles
+        const stageContainer = document.getElementById('stageContainer');
+        const popText = document.getElementById('popText');
+        const levelCountEl = document.getElementById('levelCount');
+        const patienceBarEl = document.getElementById('patienceBar');
+        const undoCountEl = document.getElementById('undoCount');
+        const gateOverlay = document.getElementById('gateOverlay');
+        const rulesModal = document.getElementById('rulesModal');
+
+        function showRules() { rulesModal.classList.remove('hidden'); rulesModal.classList.add('flex'); }
+        function hideRules() { rulesModal.classList.add('hidden'); rulesModal.classList.remove('flex'); }
+
+        function loadLevel() {
+            currentCapacity = getCapacityForLevel(currentLevel);
+            cupsState = JSON.parse(JSON.stringify(generateLevel(currentLevel)));
+            undos = 5;
+            moveHistory = [];
+            selectedCup = null;
+            updateUI();
+            renderCups();
+        }
+
+        function startGame() {
+            initAudio();
+            gateOverlay.classList.add('hidden');
+            currentLevel = 1;
+            loadLevel();
+        }
+        
+        function resetLevel() {
+            if(isAnimating) return;
+            selectedCup = null;
+            playSfx('error');
+            loadLevel();
+        }
+        
+        function giveUp() {
+            if(isAnimating) return;
+            selectedCup = null;
+            triggerError("RAGE QUIT");
+            setTimeout(exitGame, 800);
+        }
+
+        function exitGame() {
+            stopBGM();
+            gateOverlay.classList.remove('hidden');
+        }
+
+        function renderCups() {
+            for(let i=0; i<4; i++) {
+                const domCup = document.getElementById(`cup${i}`);
+                domCup.innerHTML = '';
+                let arr = [...cupsState[i]].reverse();
+                arr.forEach(color => {
+                    let div = document.createElement('div');
+                    div.className = `liquid-layer liq-${color}`;
+                    // Dynamic height based on capacity (e.g 4 -> 25%)
+                    div.style.height = (100 / currentCapacity) + '%';
+                    domCup.appendChild(div);
+                });
+                
+                if (selectedCup === i) domCup.classList.add('selected');
+                else domCup.classList.remove('selected');
+            }
+        }
+
+        function updateUI() {
+            undoCountEl.innerText = undos;
+            levelCountEl.innerText = `${currentLevel}/${TOTAL_LEVELS}`;
+            
+            let pct = (currentLevel / TOTAL_LEVELS) * 100;
+            patienceBarEl.style.width = `${Math.max(4, pct)}%`;
+            
+            if (currentLevel >= TOTAL_LEVELS) {
+                patienceBarEl.classList.add('from-green-400', 'to-emerald-500');
+            }
+        }
+
+        function showPopText(msg, colorClass) {
+            popText.innerText = msg;
+            popText.className = `absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] md:text-xs font-black drop-shadow-[0_5px_5px_rgba(0,0,0,1)] opacity-0 pointer-events-none z-50 whitespace-normal text-center pixel-text max-w-xs leading-loose p-4 border-2 rounded ${colorClass} animate-pop bg-slate-900 border-current block`;
+            popText.classList.remove('animate-pop');
+            void popText.offsetWidth;
+            popText.classList.add('animate-pop');
+            
+            setTimeout(() => {
+                popText.classList.add('hidden');
+            }, 1800);
+        }
+
+        function triggerError(msg) {
+            playSfx('error');
+            stageContainer.classList.add('shake-animation');
+            showPopText(msg, 'text-red-400');
+            setTimeout(() => stageContainer.classList.remove('shake-animation'), 300);
+        }
+
+        function checkWin() {
+            for(let i=0; i<4; i++) {
+                if (cupsState[i].length > 0) {
+                    if (cupsState[i].length !== currentCapacity) return false;
+                    let color = cupsState[i][0];
+                    if (!cupsState[i].every(c => c === color)) return false;
+                }
+            }
+            return true;
+        }
+
+        function handleCupClick(idx) {
+            if (isAnimating) return;
+
+            // Scenario 1: Select Cup
+            if (selectedCup === null) {
+                if (cupsState[idx].length === 0) return; 
+                selectedCup = idx;
+                playSfx('select');
+                renderCups();
+                return;
+            }
+
+            // Scenario 2: Put Cup Down
+            if (selectedCup === idx) {
+                selectedCup = null;
+                playSfx('select');
+                renderCups();
+                return;
+            }
+
+            // Scenario 3: Pour
+            let srcId = selectedCup;
+            let dstId = idx;
+            
+            let srcArr = cupsState[srcId];
+            let dstArr = cupsState[dstId];
+
+            let topColorSrc = srcArr[srcArr.length - 1];
+            
+            // Revert back to auto-deselect after validated attempt/fail
+            if (dstArr.length >= currentCapacity) {
+                triggerError("Cup full lah.");
+                selectedCup = null;
+                renderCups();
+                return;
+            }
+            
+            if (dstArr.length > 0) {
+                let topColorDst = dstArr[dstArr.length - 1];
+                if (topColorSrc !== topColorDst) {
+                    triggerError(roasts.invalidColor);
+                    selectedCup = null;
+                    renderCups();
+                    return;
+                }
+            }
+
+            isAnimating = true;
+            selectedCup = null; // deselect immediately!
+            renderCups(); // remove hover visually
+            
+            playSfx('pour');
+            animatePour(srcId, dstId, topColorSrc, () => {
+                srcArr.pop();
+                dstArr.push(topColorSrc);
+                
+                moveHistory.push({ from: srcId, to: dstId });
+
+                renderCups();
+                updateUI();
+                
+                if (checkWin()) {
+                    if (currentLevel === TOTAL_LEVELS) {
+                        showPopText("YOU ESCAPED MATRIX.", 'text-white');
+                        confetti({particleCount: 200, spread: 150, origin: {y: 0.6}, zIndex: 100});
+                        setTimeout(() => exitGame(), 4000);
+                        return;
+                    }
+
+                    showPopText(roasts.win, 'text-green-400');
+                    confetti({particleCount: 100, spread: 70, origin: {y: 0.6}, colors: ['#f472b6', '#d97706', '#291307']});
+                    setTimeout(() => {
+                        currentLevel++;
+                        loadLevel();
+                        isAnimating = false;
+                    }, 2000);
+                    return;
+                }
+                
+                isAnimating = false;
+            });
+        }
+
+        function animatePour(srcId, dstId, colorCls, callback) {
+            const srcDom = document.getElementById(`cup${srcId}`);
+            const dstDom = document.getElementById(`cup${dstId}`);
+            
+            const srcRect = srcDom.getBoundingClientRect();
+            const dstRect = dstDom.getBoundingClientRect();
+
+            let layerH = 96 / currentCapacity;
+            const temp = document.createElement('div');
+            temp.className = `liquid-layer absolute liq-${colorCls} animate-arc shadow-xl border border-white/50 rounded-sm`;
+            temp.style.width = '52px';
+            temp.style.height = layerH + 'px';
+            temp.style.left = `${srcRect.left}px`;
+            temp.style.top = `${srcRect.top - 15}px`;
+
+            const dx = dstRect.left - srcRect.left;
+            const dy = (dstRect.top - srcRect.top) + ( (currentCapacity - cupsState[dstId].length)*layerH ) - 15;
+
+            temp.style.setProperty('--dx', `${dx}px`);
+            temp.style.setProperty('--dy', `${dy}px`);
+            
+            document.body.appendChild(temp);
+            
+            setTimeout(() => {
+                temp.remove();
+                callback();
+            }, 350);
+        }
+
+        function timeTravel() {
+            if (isAnimating || undos <= 0 || moveHistory.length === 0) return;
+            const lastMove = moveHistory.pop();
+            const color = cupsState[lastMove.to].pop();
+            cupsState[lastMove.from].push(color);
+            
+            undos--;
+            selectedCup = null; 
+            playSfx('select');
+            updateUI();
+            renderCups();
+        }
+
+        for(let i=0; i<4; i++) {
+            document.getElementById(`cup${i}`).addEventListener('click', () => handleCupClick(i));
+        }
+
+    </script>
+</body>
+</html>
