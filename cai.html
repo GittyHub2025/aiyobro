@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CAI PNG CALCULATOR (v1.0)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        body { background: linear-gradient(135deg, #020617, #312e81, #0f172a); background-attachment: fixed; color: #ffffff; touch-action: manipulation; user-select: none; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        .pixel-text { font-family: 'Press Start 2P', cursive; text-transform: uppercase; text-shadow: 2px 2px 0px #000; line-height: 1.4; }
+        
+        .console-screen { background-color: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px); border: 4px solid #10b981; border-radius: 12px; box-shadow: inset 0 0 20px rgba(0,0,0,0.6), 0 10px 25px rgba(0,0,0,0.5); position: relative; }
+        
+        /* Fixed Aspect Grid */
+        .dish-cell { 
+            background-color: rgba(30, 41, 59, 0.95); 
+            border: 3px solid #334155; 
+            border-radius: 8px; 
+            transition: transform 0.1s, box-shadow 0.2s, border-color 0.2s; 
+            cursor: pointer; 
+            display: flex; 
+            flex-direction: column;
+            align-items: center; justify-content: center; 
+            aspect-ratio: 1 / 1; 
+            overflow: hidden;
+            box-sizing: border-box;
+            width: 100%;
+        }
+        .dish-cell:active { transform: scale(0.95); }
+        .dish-cell.selected { 
+            border-color: #f472b6; 
+            box-shadow: 0 0 20px rgba(244, 114, 182, 0.8); 
+            background-color: rgba(76, 29, 149, 0.9);
+            transform: translateY(-5px);
+        }
+
+        .price-tag { opacity: 1; transition: opacity 0.3s; }
+        .hidden-price .price-tag { opacity: 0; }
+
+        .glow-btn-container {
+            position: relative; border-radius: 14px; overflow: hidden; padding: 4px; z-index: 1; cursor: pointer; width: 100%;
+        }
+        .glow-btn-container::before {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: conic-gradient(transparent, transparent, transparent, #10b981, #f59e0b, #6366f1);
+            animation: rotate 2s linear infinite; z-index: -2;
+        }
+        .glow-btn-container::after {
+            content: ''; position: absolute; inset: 3px; background: #0f172a; border-radius: 10px; z-index: -1;
+        }
+        .glow-btn-content {
+            background: transparent; color: white; font-weight: 800; padding: 18px 24px; border: none; width: 100%; display: block; text-align: center;
+        }
+        .glow-btn-container:active { transform: scale(0.96); }
+        @keyframes rotate { 100% { transform: rotate(360deg); } }
+
+        @keyframes popInOut { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; } 15% { transform: translate(-50%, -50%) scale(1.1) rotate(-3deg); opacity: 1; } 85% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; } }
+        .animate-pop { animation: popInOut 3.5s steps(10) forwards; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-15px); } 50% { transform: translateX(15px); } 75% { transform: translateX(-15px); } }
+        .shake-animation { animation: shake 0.3s steps(5); }
+    </style>
+</head>
+<body class="flex flex-col h-screen w-screen relative pb-10">
+
+    <!-- Global Footer -->
+    <div class="absolute bottom-2 left-1/2 -translate-x-1/2 z-[100] text-center opacity-80" style="font-family: Arial, sans-serif;">
+        <div class="text-white text-[12px] tracking-wide">&gt;_&lt; aiyo<b class="font-bold">bro</b></div>
+    </div>
+    
+    <!-- Top Bar -->
+    <div class="relative w-full z-10">
+        <div class="w-full bg-slate-900/90 h-[48px] px-4 flex items-center justify-between border-b border-emerald-500 shadow-md backdrop-blur">
+            <div class="flex items-center gap-2">
+                <button onclick="resetGame()" class="text-emerald-300 hover:text-white bg-slate-800 rounded-full w-8 h-8 flex items-center justify-center border border-emerald-500 text-sm shadow-md transition active:scale-95" title="Restart">↺</button>
+                <button onclick="showRules()" class="bg-indigo-800/80 w-8 h-8 rounded-full border border-indigo-400 flex items-center justify-center text-indigo-200 font-bold font-sans text-xs hover:scale-105 shadow-lg">i</button>
+            </div>
+            
+            <div class="text-right flex items-center gap-4">
+                <span class="pixel-text text-[7px] text-emerald-300 uppercase leading-snug text-center">LEVEL<br><span id="levelEl" class="text-white text-[10px] sm:text-[14px]">1</span></span>
+                <span class="pixel-text text-[7px] text-emerald-300 uppercase leading-snug text-center">SCORE<br><span id="scoreEl" class="text-white text-[10px] sm:text-[14px]">0</span></span>
+            </div>
+        </div>
+        <!-- Patience Bar -->
+        <div class="w-full h-1.5 bg-gray-900 overflow-hidden shadow-inner absolute top-[48px] z-0">
+            <div id="patienceBar" class="h-full bg-gradient-to-r from-cyan-400 to-blue-500 w-[100%] transition-none rounded-r"></div>
+        </div>
+    </div>
+
+    <!-- Main Game Area -->
+    <div class="flex-grow flex flex-col p-3 max-w-sm mx-auto w-full h-full justify-start mt-2 space-y-2 pt-2 pb-6 relative z-10">
+        
+        <div class="console-screen flex-grow flex flex-col items-center justify-center p-4 relative overflow-hidden" id="stageContainer">
+            
+            <div class="absolute top-4 w-full flex flex-col justify-center items-center z-30 pointer-events-none">
+                <h1 class="text-xl md:text-2xl pixel-text text-white mb-2 text-center drop-shadow-[0_0_10px_rgba(255,255,255,0.9)]">CAI PNG<br><span class="text-emerald-400">MATH</span></h1>
+                
+                <!-- Target Display -->
+                <div class="bg-slate-900/90 border-2 border-yellow-400 px-4 py-2 mt-1 shadow-[0_0_15px_rgba(234,179,8,0.5)] rounded">
+                    <h2 class="text-[9px] pixel-text text-yellow-500 text-center mb-1 line-height-[1.5]">EXACT TARGET</h2>
+                    <div class="text-2xl pixel-text text-yellow-300 text-center drop-shadow-[0_2px_2px_black]">$<span id="targetPrice">0.00</span></div>
+                </div>
+            </div>
+
+            <div id="popText" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] md:text-sm font-black text-white drop-shadow-[0_5px_5px_rgba(0,0,0,1)] opacity-0 pointer-events-none z-50 whitespace-normal text-center pixel-text max-w-[90%] leading-loose p-5 bg-slate-900 border-4 border-current rounded hidden"></div>
+
+            <!-- 3x3 Grid -->
+            <div class="grid grid-cols-3 gap-3 w-full max-w-[260px] aspect-square relative z-20 m-auto mt-[130px]" id="dishGrid">
+                <!-- Generated dynamically -->
+            </div>
+
+            <!-- Selected Trays Tracker -->
+            <div class="absolute bottom-4 left-0 w-full flex justify-center gap-3 z-30">
+                <div class="w-10 h-10 border-2 border-dashed border-gray-400 bg-slate-900/50 rounded flex items-center justify-center text-xl" id="tray-0"></div>
+                <div class="w-10 h-10 border-2 border-dashed border-gray-400 bg-slate-900/50 rounded flex items-center justify-center text-xl" id="tray-1"></div>
+                <div class="w-10 h-10 border-2 border-dashed border-gray-400 bg-slate-900/50 rounded flex items-center justify-center text-xl" id="tray-2"></div>
+            </div>
+
+            <!-- Status Mode Text -->
+            <div id="modeStatusText" class="absolute bottom-[65px] left-0 w-full text-center pixel-text text-[8px] text-cyan-400 animate-pulse tracking-widest z-30">MEMORIZE PRICES!</div>
+        </div>
+    </div>
+
+    <!-- Gate Overlay -->
+    <div id="gateOverlay" class="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center z-[90] p-6 backdrop-blur-md">
+        <h1 class="text-4xl md:text-5xl pixel-text text-white mb-2 text-center drop-shadow-[0_0_15px_rgba(255,255,255,0.5)] -mt-10">CAI PNG<br><span class="text-emerald-400">MATH</span></h1>
+        <p class="text-emerald-400 mb-8 pixel-text text-[8px] md:text-[10px] text-center leading-loose tracking-widest bg-emerald-900/30 px-3 py-1 border border-emerald-500 rounded">LOGIC & FINANCIAL LITERACY</p>
+        
+        <div class="w-full max-w-sm flex flex-col gap-4 mb-10 px-4">
+            <div class="flex items-center justify-center gap-4 bg-slate-900 p-4 border border-yellow-500 rounded-lg shadow-[0_0_15px_rgba(234,179,8,0.3)] text-center">
+                <div class="pixel-text text-[8px] text-yellow-400 leading-relaxed text-center w-full">THE PRICES WILL FLASH FOR 3 SECONDS.<br><br><span class="text-white">SELECT EXACTLY 3 DISHES TO HIT THE TARGET BUDGET!</span></div>
+            </div>
+        </div>
+
+        <div class="w-full max-w-xs flex flex-col gap-3">
+            <div class="glow-btn-container" onclick="startGame()">
+                <div class="glow-btn-content pixel-text text-sm drop-shadow-[0_2px_4px_black]">ORDER CAI PNG</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Rules Modal -->
+    <div id="rulesModal" class="absolute inset-0 z-[100] bg-black/80 hidden items-center justify-center p-4 backdrop-blur-sm">
+        <div class="w-full max-w-xs bg-slate-900 border-2 border-emerald-500 rounded-xl p-5 shadow-[0_0_15px_#10b981] relative">
+            <button onclick="hideRules()" class="absolute top-2 right-3 text-white text-lg font-sans font-bold hover:text-emerald-400">✖</button>
+            <h2 class="text-emerald-400 pixel-text text-[10px] text-center mb-6">HOW TO ORDER</h2>
+            <ul class="text-white font-sans text-sm space-y-4 font-bold">
+                <li class="flex gap-2"><span>1.</span><span>Auntie gives you a strict Target Budget (e.g. $4.50).</span></li>
+                <li class="flex gap-2 text-yellow-400 text-shadow-sm"><span>2.</span><span>Memorize the Dish Prices! They disappear after a few seconds.</span></li>
+                <li class="flex gap-2 text-pink-400 text-shadow-sm"><span>3.</span><span>Tap exactly 3 dishes that mathematically equal the target.</span></li>
+                <li class="flex gap-2 text-gray-400 text-xs"><span>*</span><span>If you exceed the budget, Auntie scolds you. Clear levels fast to score high.</span></li>
+            </ul>
+            <button onclick="hideRules()" class="mt-6 w-full bg-emerald-600 rounded py-3 text-white pixel-text text-[8px] shadow-lg active:scale-95 transition">OK CAN</button>
+        </div>
+    </div>
+
+    <script>
+        let score = 0;
+        let level = 1;
+        let gameState = 'IDLE'; // MEMORIZE, PLAYING, VALIDATING
+        
+        // Items Pools
+        const vegPool = ['🥬', '🥦', '🌶️', '🥒', '🥕'];
+        const meatPool = ['🍗', '🥩', '🍖', '🌭', '🥓'];
+        const eggPool = ['🥚', '🧊']; // Tofu
+        const premPool = ['🐟', '🦐', '🦑'];
+
+        let currentDishes = [];
+        let targetValue = 0;
+        let selectedIdxs = [];
+        let timerInt;
+
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+        let bgmInterval;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            startBGM();
+        }
+
+        function startBGM() {
+            if(bgmInterval) return;
+            // Suspense pad / slow tick
+            let tick = false;
+            bgmInterval = setInterval(() => {
+                if(audioCtx.state === 'suspended') return;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                
+                osc.type = tick ? 'sine' : 'triangle';
+                osc.frequency.setValueAtTime(tick ? 800 : 400, audioCtx.currentTime); 
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime); 
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+                
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+                tick = !tick;
+            }, 1000); // 1 tick per second clock vibe
+        }
+
+        function stopBGM() {
+            if(bgmInterval) clearInterval(bgmInterval);
+            bgmInterval = null;
+        }
+
+        function playSfx(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            
+            if (type === 'select') {
+                osc.type = 'square'; osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'cash') { // Cha-Ching!
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(2000, audioCtx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.4, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+            } else if (type === 'fail') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(50, audioCtx.currentTime + 0.5);
+                gain.gain.setValueAtTime(0.6, audioCtx.currentTime); gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+            }
+        }
+
+        // Element refs
+        const stageContainer = document.getElementById('stageContainer');
+        const dishGrid = document.getElementById('dishGrid');
+        const popText = document.getElementById('popText');
+        const scoreEl = document.getElementById('scoreEl');
+        const levelEl = document.getElementById('levelEl');
+        const targetPriceEl = document.getElementById('targetPrice');
+        const barEl = document.getElementById('patienceBar');
+        const statusText = document.getElementById('modeStatusText');
+        const gateOverlay = document.getElementById('gateOverlay');
+        const rulesModal = document.getElementById('rulesModal');
+
+        function showRules() { rulesModal.classList.remove('hidden'); rulesModal.classList.add('flex'); }
+        function hideRules() { rulesModal.classList.add('hidden'); rulesModal.classList.remove('flex'); }
+
+        function updateUI() {
+            scoreEl.innerText = score;
+            levelEl.innerText = level;
+        }
+
+        function shuffle(array) {
+            let m = array.length, t, i;
+            while (m) {
+                i = Math.floor(Math.random() * m--);
+                t = array[m]; array[m] = array[i]; array[i] = t;
+            }
+            return array;
+        }
+
+        function pickPrice(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+        function generateDishes() {
+            let dishes = [];
+            let v = shuffle([...vegPool]).slice(0,3);
+            v.forEach(e => dishes.push({emoji: e, price: pickPrice([0.5, 1.0])}));
+            
+            let m = shuffle([...meatPool]).slice(0,3);
+            m.forEach(e => dishes.push({emoji: e, price: pickPrice([2.0, 2.5, 3.0])}));
+            
+            let eTypes = shuffle([...eggPool]).slice(0,2);
+            eTypes.forEach(e => dishes.push({emoji: e, price: pickPrice([1.0, 1.5])}));
+            
+            let p = shuffle([...premPool])[0];
+            dishes.push({emoji: p, price: pickPrice([6.0, 7.0, 8.0])});
+            
+            return shuffle(dishes);
+        }
+
+        function loadLevel() {
+            currentDishes = generateDishes();
+            
+            // Map exactly 3 distinct indices to form the absolute target.
+            let comboIndices = shuffle([0,1,2,3,4,5,6,7,8]).slice(0,3);
+            targetValue = currentDishes[comboIndices[0]].price + currentDishes[comboIndices[1]].price + currentDishes[comboIndices[2]].price;
+            
+            targetPriceEl.innerText = targetValue.toFixed(2);
+            selectedIdxs = [];
+            
+            renderGrid(false); // Prices visible
+            renderTrays();
+            
+            // Phase 1: Memorization
+            gameState = 'MEMORIZE';
+            statusText.innerText = "MEMORIZE PRICES!";
+            statusText.className = "absolute bottom-[65px] left-0 w-full text-center pixel-text text-[8px] text-cyan-400 animate-pulse tracking-widest z-30";
+            
+            let flashTime = Math.max(1500, 3000 - (level * 100)); // scales down slightly
+            
+            startTimer(flashTime, 'memory', () => {
+                // Phase 2: Execution
+                gameState = 'PLAYING';
+                dishGrid.classList.add('hidden-price');
+                statusText.innerText = "AUNTIE WAITING...";
+                statusText.className = "absolute bottom-[65px] left-0 w-full text-center pixel-text text-[8px] text-pink-500 animate-pulse tracking-widest z-30";
+                
+                let patienceTime = Math.max(5000, 10000 - (level * 250)); // scales down
+                startTimer(patienceTime, 'patience', () => {
+                    handleLose("Auntie cannot wait. Next customer! Try again.");
+                });
+            });
+        }
+
+        function renderGrid(hidden) {
+            dishGrid.innerHTML = '';
+            if (hidden) dishGrid.classList.add('hidden-price');
+            else dishGrid.classList.remove('hidden-price');
+
+            for(let i=0; i<9; i++) {
+                let d = currentDishes[i];
+                let isSel = selectedIdxs.includes(i);
+                
+                let cell = document.createElement('div');
+                cell.className = `dish-cell ${isSel ? 'selected' : ''}`;
+                cell.onclick = () => handleTap(i);
+                
+                cell.innerHTML = `
+                    <div class="text-3xl md:text-4xl drop-shadow-md">${d.emoji}</div>
+                    <div class="price-tag text-[#4ade80] pixel-text text-[8px] md:text-[10px] mt-2 bg-slate-900/50 px-1 py-0.5 rounded">$${d.price.toFixed(2)}</div>
+                `;
+                dishGrid.appendChild(cell);
+            }
+        }
+
+        function renderTrays() {
+            for(let i=0; i<3; i++) {
+                let t = document.getElementById(`tray-${i}`);
+                if (i < selectedIdxs.length) {
+                    t.innerText = currentDishes[selectedIdxs[i]].emoji;
+                    t.classList.add('border-pink-500', 'bg-slate-800');
+                    t.classList.remove('border-gray-400');
+                } else {
+                    t.innerText = '';
+                    t.classList.remove('border-pink-500', 'bg-slate-800');
+                    t.classList.add('border-gray-400');
+                }
+            }
+        }
+
+        function startTimer(duration, mode, callback) {
+            let elapsed = 0;
+            let tick = 50; 
+            
+            if (mode === 'memory') {
+                barEl.classList.replace('from-pink-500', 'from-cyan-400');
+                barEl.classList.replace('to-indigo-500', 'to-blue-500');
+            } else {
+                barEl.classList.replace('from-cyan-400', 'from-pink-500');
+                barEl.classList.replace('to-blue-500', 'to-indigo-500');
+            }
+            
+            clearInterval(timerInt);
+            timerInt = setInterval(() => {
+                elapsed += tick;
+                let pct = 100 - (elapsed / duration) * 100;
+                barEl.style.width = Math.max(0, pct) + '%';
+                
+                if (elapsed >= duration) {
+                    clearInterval(timerInt);
+                    callback();
+                }
+            }, tick);
+        }
+
+        function handleTap(idx) {
+            if(gameState !== 'PLAYING') return;
+            
+            let pos = selectedIdxs.indexOf(idx);
+            if(pos !== -1) {
+                // Deselect
+                selectedIdxs.splice(pos, 1);
+                playSfx('select');
+                renderGrid(true);
+                renderTrays();
+                return;
+            }
+            
+            if(selectedIdxs.length >= 3) return; 
+            
+            // Select
+            selectedIdxs.push(idx);
+            playSfx('select');
+            renderGrid(true);
+            renderTrays();
+            
+            if(selectedIdxs.length === 3) {
+                validateTray();
+            }
+        }
+
+        function validateTray() {
+            gameState = 'VALIDATING';
+            clearInterval(timerInt);
+            
+            let sum = 0;
+            selectedIdxs.forEach(i => sum += currentDishes[i].price);
+            
+            if (Math.abs(sum - targetValue) < 0.01) {
+                // Success!
+                playSfx('cash');
+                score += (100 * level);
+                updateUI();
+                
+                popText.innerText = "MIND OF A GENIUS.\nEXACTLY BRO.";
+                popText.className = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] md:text-xs font-black drop-shadow-[0_5px_5px_rgba(0,0,0,1)] opacity-0 pointer-events-none z-50 whitespace-normal text-center pixel-text w-[90%] max-w-xs leading-loose p-5 border-4 rounded text-green-400 border-green-500 animate-pop bg-slate-950 block";
+                
+                popText.classList.remove('animate-pop');
+                void popText.offsetWidth;
+                popText.classList.add('animate-pop');
+                
+                confetti({particleCount: 80, spread: 60, origin: {y: 0.6}, colors: ['#4ade80', '#eab308']});
+                
+                setTimeout(() => {
+                    level++;
+                    loadLevel();
+                }, 3000);
+
+            } else {
+                // Failure
+                let actual = sum.toFixed(2);
+                let msg = "";
+                if (sum > targetValue) {
+                    msg = `Bro paid $${actual} out of $${targetValue.toFixed(2)} budget.\n\nYou are financially ruined. Actual scam victim.`;
+                } else {
+                    msg = `You only picked $${actual} worth!\n\nAuntie chase you with cleaver. Pay so little. SKILL ISSUE.`;
+                }
+                handleLose(msg);
+            }
+        }
+
+        function handleLose(msg) {
+            playSfx('fail');
+            stageContainer.classList.add('shake-animation');
+            
+            popText.innerText = msg;
+            popText.className = "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] md:text-xs font-black drop-shadow-[0_5px_5px_rgba(0,0,0,1)] opacity-0 pointer-events-none z-50 whitespace-normal text-center pixel-text w-[90%] max-w-xs leading-loose p-5 border-4 rounded text-red-400 border-red-500 animate-pop bg-slate-950 block";
+            
+            popText.classList.remove('animate-pop');
+            void popText.offsetWidth;
+            popText.classList.add('animate-pop');
+            
+            // Reveal prices so player sees how badly they failed
+            dishGrid.classList.remove('hidden-price');
+            
+            setTimeout(() => {
+                stageContainer.classList.remove('shake-animation');
+                stopBGM();
+                gateOverlay.classList.remove('hidden');
+                gateOverlay.querySelector('h1').innerHTML = `BANKRUPT<br><span class='text-red-500 text-3xl'>LEVEL: ${level}</span>`;
+            }, 3500);
+        }
+
+        function startGame() {
+            initAudio();
+            gateOverlay.classList.add('hidden');
+            score = 0;
+            level = 1;
+            updateUI();
+            setTimeout(() => {
+                loadLevel();
+            }, 500);
+        }
+
+        function resetGame() {
+            clearInterval(timerInt);
+            gateOverlay.classList.remove('hidden');
+        }
+
+    </script>
+</body>
+</html>
